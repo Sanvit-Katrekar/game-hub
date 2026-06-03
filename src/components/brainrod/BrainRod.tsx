@@ -2,14 +2,78 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, RotateCcw, Settings, Star, ChevronRight, Plus, Trash2, X, Check, Grid, Layers } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Settings, Star, ChevronRight, Plus, Trash2, X, Check, Timer } from 'lucide-react';
 import {
   ALL_PIECES, Piece, PuzzleConfig, PuzzleRound,
   rotateCells, cellKey, getPiecesForRound,
-  // ↓ NEW: import the puzzle registry
   ALL_PUZZLES, PuzzleMeta,
 } from '@/lib/brainrod';
 import { useRouter } from 'next/navigation';
+
+// ── Timer hook ─────────────────────────────────────────────────────────────
+// All mutable state lives in a single ref object so every function always
+// reads the latest values regardless of when the function was created.
+// The returned start/stop/reset functions have stable identity — safe to use
+// in useCallback/useEffect dep arrays without causing re-renders.
+
+function useTimer() {
+  const [elapsed, setElapsed] = useState(0);
+  const [running, setRunning] = useState(false);
+
+  // All mutable timer state in one place
+  const s = useRef({ startedAt: null as number | null, raf: null as number | null });
+
+  const tick = useRef(function loop() {
+    if (s.current.startedAt !== null) {
+      setElapsed(Date.now() - s.current.startedAt);
+      s.current.raf = requestAnimationFrame(loop);
+    }
+  });
+
+  const start = useRef(() => {
+    if (s.current.raf) cancelAnimationFrame(s.current.raf);
+    s.current.startedAt = Date.now();
+    s.current.raf = requestAnimationFrame(tick.current);
+    setElapsed(0);
+    setRunning(true);
+  });
+
+  // stop() returns the final elapsed milliseconds
+  const stop = useRef((): number => {
+    if (s.current.raf) cancelAnimationFrame(s.current.raf);
+    s.current.raf = null;
+    const finalMs = s.current.startedAt !== null ? Date.now() - s.current.startedAt : 0;
+    s.current.startedAt = null;
+    setRunning(false);
+    return finalMs;
+  });
+
+  const reset = useRef(() => {
+    if (s.current.raf) cancelAnimationFrame(s.current.raf);
+    s.current.raf = null;
+    s.current.startedAt = null;
+    setElapsed(0);
+    setRunning(false);
+  });
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { if (s.current.raf) cancelAnimationFrame(s.current.raf); };
+  }, []);
+
+  return { elapsed, running, start: start.current, stop: stop.current, reset: reset.current };
+}
+
+function formatTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const centiseconds = Math.floor((ms % 1000) / 10);
+  if (minutes > 0) {
+    return `${minutes}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
+  }
+  return `${seconds}.${String(centiseconds).padStart(2, '0')}s`;
+}
 
 // ── Board ──────────────────────────────────────────────────────────────────
 
@@ -126,7 +190,6 @@ function Board({
 
 // ── Puzzle Picker ──────────────────────────────────────────────────────────
 
-/** Mini board preview rendered as SVG — shows board shape + black cells */
 function BoardPreview({ config, size = 80 }: { config: PuzzleConfig; size?: number }) {
   const { boardRows, boardCols, blackCells } = config;
   const blackSet = new Set(blackCells);
@@ -159,16 +222,11 @@ function BoardPreview({ config, size = 80 }: { config: PuzzleConfig; size?: numb
 }
 
 function PuzzlePicker({ onSelect }: { onSelect: (meta: PuzzleMeta) => void }) {
-
   const router = useRouter();
-
   const handleBack = () => router.push("/");
 
   return (
-    <div
-      className="flex flex-col select-none my-auto"
-      style={{ background: 'var(--bg)' }}
-    >
+    <div className="flex flex-col select-none my-auto" style={{ background: 'var(--bg)' }}>
       <header
         className="sticky top-0 z-40 backdrop-blur-xl"
         style={{ background: 'rgba(14,14,18,0.9)', borderBottom: '1px solid var(--border)' }}
@@ -181,28 +239,17 @@ function PuzzlePicker({ onSelect }: { onSelect: (meta: PuzzleMeta) => void }) {
           >
             <ArrowLeft size={18} />
           </button>
-          <h1
-            className="font-display font-800 text-xl"
-            style={{ color: 'var(--text)' }}
-          >
+          <h1 className="font-display font-800 text-xl" style={{ color: 'var(--text)' }}>
             BrainRod
           </h1>
         </div>
       </header>
 
       <main className="flex flex-col items-center justify-center px-16 py-12">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md"
-        >
-          <p
-            className="text-xs uppercase tracking-widest mb-6 text-center"
-            style={{ color: 'var(--muted)' }}
-          >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
+          <p className="text-xs uppercase tracking-widest mb-6 text-center" style={{ color: 'var(--muted)' }}>
             Choose a puzzle
           </p>
-
           <div className="flex flex-col gap-4">
             {ALL_PUZZLES.map((meta, i) => (
               <motion.button
@@ -214,39 +261,24 @@ function PuzzlePicker({ onSelect }: { onSelect: (meta: PuzzleMeta) => void }) {
                 whileTap={{ scale: 0.97 }}
                 onClick={() => onSelect(meta)}
                 className="flex items-center gap-5 w-full rounded-2xl p-5 text-left"
-                style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                }}
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
               >
-                {/* Board shape preview */}
                 <div className="shrink-0 flex items-center justify-center" style={{ width: 72 }}>
                   <BoardPreview config={meta.config} size={72} />
                 </div>
-
                 <div className="flex-1 min-w-0">
-                  <p
-                    className="font-display font-700 text-base mb-1"
-                    style={{ color: 'var(--text)' }}
-                  >
+                  <p className="font-display font-700 text-base mb-1" style={{ color: 'var(--text)' }}>
                     {meta.name}
                   </p>
                   <p className="text-xs" style={{ color: 'var(--muted)' }}>
                     {meta.description}
                   </p>
-
-                  {/* Round dots */}
                   <div className="flex items-center gap-1.5 mt-3">
                     {meta.config.rounds.map((_, ri) => (
-                      <div
-                        key={ri}
-                        className="w-2 h-2 rounded-full"
-                        style={{ background: 'var(--border)' }}
-                      />
+                      <div key={ri} className="w-2 h-2 rounded-full" style={{ background: 'var(--border)' }} />
                     ))}
                   </div>
                 </div>
-
                 <ChevronRight size={16} style={{ color: 'var(--muted)', flexShrink: 0 }} />
               </motion.button>
             ))}
@@ -258,11 +290,8 @@ function PuzzlePicker({ onSelect }: { onSelect: (meta: PuzzleMeta) => void }) {
 }
 
 // ── Round Editor Modal ─────────────────────────────────────────────────────
-function RoundEditor({
-  config,
-  onSave,
-  onClose,
-}: {
+
+function RoundEditor({ config, onSave, onClose }: {
   config: PuzzleConfig;
   onSave: (cfg: PuzzleConfig) => void;
   onClose: () => void;
@@ -294,17 +323,13 @@ function RoundEditor({
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.75)' }}
       onClick={onClose}
     >
       <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
+        initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
         onClick={e => e.stopPropagation()}
         className="w-full max-w-2xl rounded-2xl overflow-hidden"
         style={{ background: 'var(--surface)', border: '1px solid var(--border)', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
@@ -313,7 +338,6 @@ function RoundEditor({
           <h2 className="font-display font-700 text-lg" style={{ color: 'var(--text)' }}>Configure Rounds</h2>
           <button onClick={onClose} style={{ color: 'var(--muted)' }}><X size={18} /></button>
         </div>
-
         <div className="flex" style={{ flex: 1, overflow: 'hidden' }}>
           <div className="flex flex-col py-4 px-3 gap-1" style={{ width: 160, borderRight: '1px solid var(--border)', overflowY: 'auto' }}>
             {rounds.map((r, i) => (
@@ -323,8 +347,7 @@ function RoundEditor({
                 style={{
                   background: i === activeRound ? 'var(--surface2)' : 'transparent',
                   color: i === activeRound ? 'var(--text)' : 'var(--muted)',
-                  fontFamily: 'Syne, sans-serif',
-                  fontWeight: 600,
+                  fontFamily: 'Syne, sans-serif', fontWeight: 600,
                 }}
                 onClick={() => setActiveRound(i)}
               >
@@ -344,7 +367,6 @@ function RoundEditor({
               <Plus size={12} /> Round
             </button>
           </div>
-
           <div className="flex-1 p-4 overflow-y-auto">
             <p className="text-xs mb-3 uppercase tracking-widest font-500" style={{ color: 'var(--muted)' }}>
               {rounds[activeRound]?.difficulty} — select pieces ({activePieceIds.length} selected)
@@ -373,7 +395,6 @@ function RoundEditor({
             </div>
           </div>
         </div>
-
         <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm" style={{ color: 'var(--muted)', background: 'var(--surface2)' }}>
             Cancel
@@ -391,8 +412,17 @@ function RoundEditor({
   );
 }
 
-// ── Star celebration ───────────────────────────────────────────────────────
-function StarCelebration({ onNext, isLast }: { onNext: () => void; isLast: boolean }) {
+// ── Star Celebration ───────────────────────────────────────────────────────
+
+function StarCelebration({
+  onNext,
+  isLast,
+  solveTimeMs,
+}: {
+  onNext: () => void;
+  isLast: boolean;
+  solveTimeMs: number;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -409,6 +439,7 @@ function StarCelebration({ onNext, isLast }: { onNext: () => void; isLast: boole
       >
         <Star size={96} fill="#f5c842" color="#f5c842" />
       </motion.div>
+
       <motion.h2
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -418,19 +449,35 @@ function StarCelebration({ onNext, isLast }: { onNext: () => void; isLast: boole
       >
         Solved!
       </motion.h2>
+
+      {/* Solve time */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.45, type: 'spring', stiffness: 200 }}
+        className="flex items-center gap-2 px-5 py-2.5 rounded-2xl mb-4"
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+      >
+        <Timer size={16} style={{ color: 'var(--muted)' }} />
+        <span className="font-display font-700 text-2xl tabular-nums" style={{ color: 'var(--text)' }}>
+          {formatTime(solveTimeMs)}
+        </span>
+      </motion.div>
+
       <motion.p
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.5 }}
+        transition={{ delay: 0.55 }}
         className="mb-8 text-sm"
         style={{ color: 'var(--muted)' }}
       >
         {isLast ? 'All rounds complete — amazing!' : 'Get ready for the next round…'}
       </motion.p>
+
       <motion.button
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6 }}
+        transition={{ delay: 0.65 }}
         whileHover={{ scale: 1.04 }}
         whileTap={{ scale: 0.97 }}
         onClick={onNext}
@@ -443,16 +490,33 @@ function StarCelebration({ onNext, isLast }: { onNext: () => void; isLast: boole
   );
 }
 
+// ── Live Timer Display ─────────────────────────────────────────────────────
+
+function LiveTimer({ elapsed, running }: { elapsed: number; running: boolean }) {
+  return (
+    <motion.div
+      animate={{ opacity: running ? 1 : 0.45 }}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl tabular-nums"
+      style={{
+        background: 'var(--surface2)',
+        border: '1px solid var(--border)',
+        minWidth: 80,
+      }}
+    >
+      <Timer size={13} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+      <span
+        className="font-display font-700 text-sm"
+        style={{ color: running ? 'var(--text)' : 'var(--muted)', letterSpacing: '0.02em' }}
+      >
+        {formatTime(elapsed)}
+      </span>
+    </motion.div>
+  );
+}
+
 // ── Game Screen ────────────────────────────────────────────────────────────
 
-function GameScreen({
-  meta,
-  onBack,
-}: {
-  meta: PuzzleMeta;
-  onBack: () => void;
-}) {
-  // config can be overridden by the round editor
+function GameScreen({ meta, onBack }: { meta: PuzzleMeta; onBack: () => void }) {
   const [config, setConfig] = useState<PuzzleConfig>(() => JSON.parse(JSON.stringify(meta.config)));
   const [roundIndex, setRoundIndex] = useState(0);
   const [boardState, setBoardState] = useState<BoardState>({});
@@ -466,8 +530,14 @@ function GameScreen({
   const [previewCells, setPreviewCells] = useState<Set<string>>(new Set());
   const [previewValid, setPreviewValid] = useState(false);
   const [resetKey, setResetKey] = useState(0);
+  const [solveTimeMs, setSolveTimeMs] = useState(0);
+
+  const timer = useTimer();
+
   const previewRef = useRef<{ cells: Set<string>; valid: boolean }>({ cells: new Set(), valid: false });
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  // Track whether the timer has been started for this round (starts on first piece placement)
+  const timerStarted = useRef(false);
 
   const pieces = getPiecesForRound(config, roundIndex);
   const selectedPiece = pieces.find(p => p.id === selectedPieceId) ?? null;
@@ -489,7 +559,9 @@ function GameScreen({
     previewRef.current = { cells: new Set(), valid: false };
     setPreviewCells(new Set());
     setPreviewValid(false);
-  }, []);
+    timer.reset();
+    timerStarted.current = false;
+  }, []); // timer.reset is a stable ref — safe without listing in deps
 
   useEffect(() => { resetRound(); }, [roundIndex, resetRound]);
 
@@ -513,10 +585,12 @@ function GameScreen({
   useEffect(() => {
     const filled = Object.values(boardState).filter(Boolean).length;
     if (filled === totalActive && totalActive > 0) {
+      const finalTime = timer.stop();
+      setSolveTimeMs(finalTime);
       navigator.vibrate?.(100);
       setTimeout(() => setShowStar(true), 300);
     }
-  }, [boardState, totalActive]);
+  }, [boardState, totalActive]); // timer.stop is a stable ref
 
   const handleHoverCell = useCallback((key: string | null) => {
     if (!key) {
@@ -536,6 +610,13 @@ function GameScreen({
     if (!selectedPiece) return;
     const { cells, valid } = previewRef.current.cells.size > 0 ? previewRef.current : computePlacement(r, c);
     if (!valid || cells.size === 0) return;
+
+    // Start timer on first successful placement
+    if (!timerStarted.current) {
+      timer.start();
+      timerStarted.current = true;
+    }
+
     const next = { ...boardState };
     cells.forEach(k => { next[k] = selectedPiece.id; });
     navigator.vibrate?.(20);
@@ -546,7 +627,7 @@ function GameScreen({
     previewRef.current = { cells: new Set(), valid: false };
     setPreviewCells(new Set());
     setPreviewValid(false);
-  }, [selectedPiece, computePlacement, boardState]);
+  }, [selectedPiece, computePlacement, boardState]); // timer.start is a stable ref
 
   const removePiece = (pid: string) => {
     const next = { ...boardState };
@@ -578,7 +659,6 @@ function GameScreen({
       setCompletedRounds(prev => [...prev, roundIndex]);
     }
     if (isLast) {
-      // All rounds done — go back to puzzle picker
       onBack();
     } else {
       setRoundIndex(prev => prev + 1);
@@ -612,7 +692,6 @@ function GameScreen({
         style={{ background: 'rgba(14,14,18,0.9)', borderBottom: '1px solid var(--border)' }}
       >
         <div className="flex items-center justify-between px-4 sm:px-6 py-3">
-          {/* Back to puzzle picker */}
           <button
             onClick={onBack}
             className="flex items-center gap-2 min-h-[44px] px-2 touch-manipulation cursor-pointer"
@@ -622,24 +701,26 @@ function GameScreen({
             <span className="hidden sm:inline text-sm">Puzzles</span>
           </button>
 
-          {/* Round progress dots */}
-          <div className="flex items-center gap-2">
-            {config.rounds.map((round, i) => (
-              <div
-                key={round.id}
-                className="w-2.5 h-2.5 rounded-full transition-all"
-                style={{
-                  background: completedRounds.includes(i)
-                    ? 'var(--accent)'
-                    : i === roundIndex
-                    ? 'var(--text)'
-                    : 'var(--border)',
-                }}
-              />
-            ))}
-          </div>
+          {/* Live Timer — centre of header */}
+          <LiveTimer elapsed={timer.elapsed} running={timer.running} />
 
           <div className="flex items-center gap-2">
+            {/* Round progress dots */}
+            <div className="hidden sm:flex items-center gap-2 mr-2">
+              {config.rounds.map((round, i) => (
+                <div
+                  key={round.id}
+                  className="w-2.5 h-2.5 rounded-full transition-all"
+                  style={{
+                    background: completedRounds.includes(i)
+                      ? 'var(--accent)'
+                      : i === roundIndex
+                      ? 'var(--text)'
+                      : 'var(--border)',
+                  }}
+                />
+              ))}
+            </div>
             <button
               onClick={() => setShowEditor(true)}
               className="h-10 px-3 rounded-xl touch-manipulation"
@@ -648,6 +729,23 @@ function GameScreen({
               <Settings size={16} />
             </button>
           </div>
+        </div>
+
+        {/* Mobile round dots — below header row */}
+        <div className="flex sm:hidden items-center justify-center gap-2 pb-2">
+          {config.rounds.map((round, i) => (
+            <div
+              key={round.id}
+              className="w-2 h-2 rounded-full transition-all"
+              style={{
+                background: completedRounds.includes(i)
+                  ? 'var(--accent)'
+                  : i === roundIndex
+                  ? 'var(--text)'
+                  : 'var(--border)',
+              }}
+            />
+          ))}
         </div>
       </header>
 
@@ -688,7 +786,7 @@ function GameScreen({
               <p className="text-xs sm:text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
                 {selectedPiece
                   ? (isMobile ? 'Tap board to place • Long press to remove' : 'Click to place • Right-click to remove')
-                  : 'Select a piece below'
+                  : timerStarted.current ? 'Select a piece below' : 'Select a piece to start the timer'
                 }
               </p>
             </div>
@@ -811,7 +909,7 @@ function GameScreen({
       {/* STAR CELEBRATION */}
       <AnimatePresence>
         {showStar && (
-          <StarCelebration onNext={handleNextRound} isLast={isLast} />
+          <StarCelebration onNext={handleNextRound} isLast={isLast} solveTimeMs={solveTimeMs} />
         )}
       </AnimatePresence>
     </div>
@@ -829,7 +927,7 @@ export default function BrainRod() {
 
   return (
     <GameScreen
-      key={activePuzzle.id}   // re-mounts GameScreen fresh when puzzle changes
+      key={activePuzzle.id}
       meta={activePuzzle}
       onBack={() => setActivePuzzle(null)}
     />
