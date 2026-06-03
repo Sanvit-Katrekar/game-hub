@@ -212,7 +212,7 @@ function BoardPreview({ config, size = 80 }: { config: PuzzleConfig; size?: numb
               width={cellPx}
               height={cellPx}
               rx={2}
-              fill={isBlack ? '#0e0e12' : '#2a2a38'}
+              fill={isBlack ? '#080809' : '#4a4a62'}
             />
           );
         })
