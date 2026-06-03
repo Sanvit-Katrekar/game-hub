@@ -15,7 +15,7 @@
 </div>
 <br />
 
-A collection of browser-based games built with **Next.js**, featuring a modern, responsive interface and interactive gameplay experiences.
+A collection of browser-based games vibed with **Next.js**, featuring a modern, responsive interface and interactive gameplay experiences.
 
 Currently includes:
 
