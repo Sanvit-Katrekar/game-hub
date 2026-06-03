@@ -1,0 +1,7 @@
+services:
+  game-hub:
+    build: .
+    container_name: game-hub
+    ports:
+      - "3003:3000"
+    restart: always

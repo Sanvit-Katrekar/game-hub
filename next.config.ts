@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: [
     'katrekars'
   ],
+  output: "standalone"
 };
 
 export default nextConfig;
