@@ -146,7 +146,7 @@ function Board({
           const filledBy = boardState[key];
           const isPreview = previewCells.has(key);
 
-          let bg = '#22222c';
+          let bg = '#4a4a62' // '#22222c';
           if (isBlack) bg = '#0e0e12';
           else if (filledBy) bg = pieceColors[filledBy] ?? '#555';
           else if (isPreview && previewValid) bg = (selectedPiece?.color ?? '#555') + 'aa';
@@ -275,7 +275,7 @@ function PuzzlePicker({ onSelect }: { onSelect: (meta: PuzzleMeta) => void }) {
                   </p>
                   <div className="flex items-center gap-1.5 mt-3">
                     {meta.config.rounds.map((_, ri) => (
-                      <div key={ri} className="w-2 h-2 rounded-full" style={{ background: 'var(--border)' }} />
+                      <div key={ri} className="w-2 h-2 rounded-full bg-[#4a4a62]" />
                     ))}
                   </div>
                 </div>
