@@ -559,8 +559,6 @@ function GameScreen({ meta, onBack }: { meta: PuzzleMeta; onBack: () => void }) 
     previewRef.current = { cells: new Set(), valid: false };
     setPreviewCells(new Set());
     setPreviewValid(false);
-    timer.reset();
-    timerStarted.current = false;
   }, []); // timer.reset is a stable ref — safe without listing in deps
 
   useEffect(() => { resetRound(); }, [roundIndex, resetRound]);
@@ -663,6 +661,8 @@ function GameScreen({ meta, onBack }: { meta: PuzzleMeta; onBack: () => void }) 
     } else {
       setRoundIndex(prev => prev + 1);
     }
+    timer.reset();
+    timerStarted.current = false;
   };
 
   const handleSaveConfig = (newConfig: PuzzleConfig) => {
