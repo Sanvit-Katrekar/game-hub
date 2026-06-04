@@ -207,7 +207,7 @@ export const ALL_PUZZLES: PuzzleMeta[] = [
   {
     id: 'glazed-puzzles',
     name: 'Glazed Puzzles',
-    description: 'Smooth on the surface, tricky underneath · 1 round',
+    description: 'Smooth on the surface, tricky underneath · 2 rounds',
     config: {
       boardRows: 4,
       boardCols: 5,
@@ -229,7 +229,7 @@ export const ALL_PUZZLES: PuzzleMeta[] = [
   {
     id: 'cooked-clues',
     name: 'Cooked Clues',
-    description: 'The hints are in the heat · 1 round',
+    description: 'The hints are in the heat · 5 rounds',
     config: {
       boardRows: 5,
       boardCols: 5,
@@ -266,7 +266,7 @@ export const ALL_PUZZLES: PuzzleMeta[] = [
   {
     id: '404-brain-not-found',
     name: '404: Brain Not Found',
-    description: 'Error: logic.exe has stopped responding · 1 round',
+    description: 'Error: logic.exe has stopped responding · 2 rounds',
     config: {
       boardRows: 5,
       boardCols: 4,
@@ -274,16 +274,21 @@ export const ALL_PUZZLES: PuzzleMeta[] = [
       rounds: [
         {
           id: 'round-1',
-          difficulty: 'Easy',
+          difficulty: 'Medium',
           pieceIds: ['square-tail', 'bar-3', 'hook', 'bar-2'],
+        },
+        {
+          id: 'round-2',
+          difficulty: 'Medium',
+          pieceIds: ['bar-4', 'bar-3', 'bar-2', 'l-short'],
         },
       ],
     }
   },
   {
-    id: 'fully-cooked',
-    name: 'Fully Cooked',
-    description: 'No half measures, go all the way · 1 round',
+    id: 'npc-mode-disabled',
+    name: 'NPC Mode: Disabled',
+    description: "You weren't thinking - until now · 2 rounds",
     config: {
       boardRows: 5,
       boardCols: 5,
@@ -291,7 +296,7 @@ export const ALL_PUZZLES: PuzzleMeta[] = [
       rounds: [
         {
           id: 'round-1',
-          difficulty: 'Medium',
+          difficulty: 'Hard',
           pieceIds: ['bar-4', 'square-tail', 'zigzag-short-mirr', 'l-long'],
         },
         {
