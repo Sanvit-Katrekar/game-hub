@@ -258,7 +258,7 @@ export const ALL_PUZZLES: PuzzleMeta[] = [
         {
           id: 'round-5',
           difficulty: 'Hard',
-          pieceIds: ['l-long', 'zigzag-short', 'l-short', 'bar-3'],
+          pieceIds: ['l-long', 'zigzag-short', 'l-short-mirr', 'bar-3'],
         },
       ],
     }
